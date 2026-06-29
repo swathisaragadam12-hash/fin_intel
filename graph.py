@@ -21,12 +21,15 @@ llm_with_tools = llm.bind_tools(all_tools)
 def call_model(state: AgentState) -> dict:
     """Node handler responsible for executing the agent's core model intelligence."""
     system_prompt = (
-        "You are fin_intel, an advanced conversational financial analyst. You specialize in "
-        "interpreting corporate financials, checking ratios, and summarizing macro trends. "
-        "Utilize tools when users ask for real-time stock profiles. If the user explicitly asks "
-        "to save, write, or export information to a PDF document, trigger the `generate_pdf_report` tool."
+        "You are fin_intel, an expert financial analyst. "
+        "When a user asks for a report or PDF of a company (e.g., 'generate pdf report of apple'), "
+        "you must follow a strict 2-step pipeline without asking for permission:\n"
+        "1. First, call `get_stock_analysis` to fetch the real-time company metrics.\n"
+        "2. Second, take that retrieved financial data, format it cleanly, and immediately "
+        "call `generate_pdf_report` to write the file.\n\n"
+        "CRITICAL: Output clear, professional conversational text only. "
+        "Never return raw list objects, text dictionaries, or metadata signatures to the user."
     )
-    # Concatenate the core instructions alongside conversational history
     messages = [HumanMessage(content=system_prompt)] + list(state["messages"])
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}

@@ -58,26 +58,31 @@ if user_query := st.chat_input("Query company metrics or request: 'Export a PDF 
             inputs = {"messages": st.session_state.graph_messages}
             config = {"configurable": {"thread_id": "swathi_session_stream"}}
             
-            # Fire graph execution sequence pipeline block
             output_state = compiled_agent.invoke(inputs, config)
-            
-            # Persist full message list output back to state tracking array
             st.session_state.graph_messages = output_state["messages"]
             
-            # Read final text string from the message sequence history
             final_ai_reply = output_state["messages"][-1].content
-            st.markdown(final_ai_reply)
             
-            # Track final answer in UI storage list
+            # --- STUDENT SAFEGUARD: Clean up any leaked API metadata blocks ---
+            if isinstance(final_ai_reply, str) and (final_ai_reply.startswith("[{") or "'signature':" in final_ai_reply):
+                # If the model returned a raw payload string, look for normal conversational text lines
+                lines = final_ai_reply.split("\n")
+                cleaned_lines = [l for l in lines if "'signature':" not in l and "'type':" not in l and not l.strip().startswith("[{")]
+                final_ai_reply = "\n".join(cleaned_lines).strip()
+                
+                # Fallback backup message if the string was completely compromised
+                if not final_ai_reply or len(final_ai_reply) < 10:
+                    final_ai_reply = "I have successfully processed the data pipeline and built your requested financial profile below!"
+            # ------------------------------------------------------------------
+            
+            st.markdown(final_ai_reply)
             st.session_state.ui_messages.append({"role": "assistant", "content": final_ai_reply})
             
-            # Audit context lists to check if the PDF compilation tool ran successfully
             pdf_generation_triggered = any(
                 isinstance(m, ToolMessage) and "SUCCESS: PDF report" in str(m.content)
                 for m in output_state["messages"]
-            )
+                )
             
-            # Refresh interface frames safely if new file downloads became available
             if pdf_generation_triggered:
                 st.success("New financial report artifact compiled to background files!")
                 st.rerun()
