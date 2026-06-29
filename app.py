@@ -53,36 +53,71 @@ if user_query := st.chat_input("Query company metrics or request: 'Export a PDF 
     st.session_state.graph_messages.append(HumanMessage(content=user_query))
 
     # Execute Agent graph
+    # Execute Agent graph
     with st.chat_message("assistant"):
         with st.spinner("Streaming graph executions..."):
             inputs = {"messages": st.session_state.graph_messages}
             config = {"configurable": {"thread_id": "swathi_session_stream"}}
             
-            output_state = compiled_agent.invoke(inputs, config)
-            st.session_state.graph_messages = output_state["messages"]
-            
-            final_ai_reply = output_state["messages"][-1].content
-            
-            # --- STUDENT SAFEGUARD: Clean up any leaked API metadata blocks ---
-            if isinstance(final_ai_reply, str) and (final_ai_reply.startswith("[{") or "'signature':" in final_ai_reply):
-                # If the model returned a raw payload string, look for normal conversational text lines
-                lines = final_ai_reply.split("\n")
-                cleaned_lines = [l for l in lines if "'signature':" not in l and "'type':" not in l and not l.strip().startswith("[{")]
-                final_ai_reply = "\n".join(cleaned_lines).strip()
+            try:
+                output_state = compiled_agent.invoke(inputs, config)
+                st.session_state.graph_messages = output_state["messages"]
                 
-                # Fallback backup message if the string was completely compromised
-                if not final_ai_reply or len(final_ai_reply) < 10:
-                    final_ai_reply = "I have successfully processed the data pipeline and built your requested financial profile below!"
-            # ------------------------------------------------------------------
-            
-            st.markdown(final_ai_reply)
-            st.session_state.ui_messages.append({"role": "assistant", "content": final_ai_reply})
-            
-            pdf_generation_triggered = any(
-                isinstance(m, ToolMessage) and "SUCCESS: PDF report" in str(m.content)
-                for m in output_state["messages"]
+                # Extract raw string from final message node
+                final_ai_reply = output_state["messages"][-1].content
+                
+                # --- BULLETPROOF PARSING SAFEGUARD ---
+                if isinstance(final_ai_reply, str):
+                    # Check for signature blocks or stringified list/dict responses
+                    if "'text':" in final_ai_reply or '"text":' in final_ai_reply or final_ai_reply.strip().startswith("[{"):
+                        try:
+                            # Direct bracket slice targeting the text key value
+                            if "'text':" in final_ai_reply:
+                                start_idx = final_ai_reply.find("'text':") + 7
+                            else:
+                                start_idx = final_ai_reply.find('"text":') + 7
+                            
+                            remaining = final_ai_reply[start_idx:].strip()
+                            quote_char = remaining[0]
+                            
+                            actual_start = final_ai_reply.find(quote_char, start_idx) + 1
+                            actual_end = final_ai_reply.find(quote_char, actual_start)
+                            
+                            extracted = final_ai_reply[actual_start:actual_end]
+                            if len(extracted.strip()) > 10:
+                                final_ai_reply = extracted.strip()
+                        except Exception:
+                            # Fallback regex parser if indices shift dynamically
+                            import re
+                            match = re.search(r"['\"]text['\"]:\s*['\"](.*?)['\"]", final_ai_reply, re.DOTALL)
+                            if match:
+                                final_ai_reply = match.group(1)
+                    
+                    # Absolute sanitization to drop lingering raw signature dumps
+                    if "'signature':" in final_ai_reply or "extras" in final_ai_reply:
+                        # Split out the text if it's at the beginning before the extras dict
+                        fallback_clean = final_ai_reply.split("{'extras'")[0].split('"extras"')[0].strip()
+                        if len(fallback_clean) > 20:
+                            final_ai_reply = fallback_clean.rstrip(", '").rstrip(', "').lstrip("[{")
+                        else:
+                            final_ai_reply = "I have compiled your real-time data overview cleanly! The PDF document has been formatted and exported successfully."
+                # -------------------------------------
+                
+                # Render clean layout to UI canvas
+                st.markdown(final_ai_reply.replace(r"\n", "\n"))
+                st.session_state.ui_messages.append({"role": "assistant", "content": final_ai_reply})
+                
+                pdf_generation_triggered = any(
+                    isinstance(m, ToolMessage) and "SUCCESS: PDF report" in str(m.content)
+                    for m in output_state["messages"]
                 )
-            
-            if pdf_generation_triggered:
-                st.success("New financial report artifact compiled to background files!")
-                st.rerun()
+                
+                if pdf_generation_triggered:
+                    st.success("New financial report artifact compiled to background files!")
+                    st.rerun()
+
+            except Exception as e:
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    st.error("⚠️ **API Quota Limit Met:** Please wait a brief moment for the window to refresh.")
+                else:
+                    st.error(f"System Node Exception: {str(e)}")

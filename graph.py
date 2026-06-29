@@ -14,7 +14,7 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 # 2. Bind the Gemini 2.5 Flash model with custom operational toolsets
-llm = ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=0.2)
+llm = ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=0.2, max_retries=3)
 llm_with_tools = llm.bind_tools(all_tools)
 
 # 3. Node definition for LLM interaction
