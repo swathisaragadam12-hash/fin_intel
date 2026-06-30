@@ -1,0 +1,12 @@
+streamlit
+langchain
+langchain-core
+langgraph
+langchain-google-genai
+google-generativeai
+yfinance
+pandas
+numpy
+matplotlib
+fpdf2
+python-dotenv
