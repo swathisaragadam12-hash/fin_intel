@@ -8,7 +8,7 @@ from config import REPORTS_DIR
 from graph import compiled_agent
 
 st.set_page_config(page_title="fin_intel Dashboard", page_icon="📈", layout="wide")
-st.title("📈 fin_intel Hub")
+st.title("📈 Fin_Intel")
 st.caption("Personal Financial Intelligence Engine | Built using LangGraph, Gemini 2.5 Flash and Streamlit")
 
 if "graph_messages" not in st.session_state:
